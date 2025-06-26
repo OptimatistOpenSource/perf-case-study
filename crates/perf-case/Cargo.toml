@@ -1,0 +1,15 @@
+[package]
+name = "perf-case"
+version = "0.1.0"
+edition = "2024"
+
+[[bench]]
+harness = false
+name = "zero_init"
+
+[dependencies]
+rand = { workspace = true }
+update-data = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }

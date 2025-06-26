@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = [".github", "sample/"]
+
+[workspace.package]
+authors = ["saying121 <saying121@outlook.com>"]
+edition = "2024"
+homepage = ""
+repository = ""
+
+[workspace.dependencies]
+criterion = "0.6.0"
+rand = "0.9.1"
+update-data = { path = "./crates/update-data" }
+
+[profile.profiling]
+inherits = "release"
+debug = true
