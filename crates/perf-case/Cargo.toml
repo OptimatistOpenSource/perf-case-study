@@ -7,6 +7,10 @@ edition = "2024"
 harness = false
 name = "zero_init"
 
+[[bench]]
+harness = false
+name = "chain_call"
+
 [dependencies]
 rand = { workspace = true }
 update-data = { workspace = true }
