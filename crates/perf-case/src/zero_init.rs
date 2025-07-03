@@ -1,44 +1,41 @@
 use std::mem::MaybeUninit;
 
-use rand::{Rng, SeedableRng};
-
-pub fn random_array() -> [u64; 25] {
-    let mut res = [0; 25];
-    let mut rng = rand::rngs::StdRng::from_os_rng();
-    rng.fill(&mut res);
-    res
-}
-
-#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct ZeroInit {
     state: [u64; 25],
-    is_uninit: bool,
 }
 
 impl ZeroInit {
-    // #[inline(never)]
     pub fn new() -> Self {
-        Self {
-            state: [0; 25],
-            is_uninit: false,
-        }
+        Self { state: [0; 25] }
     }
 
-    // #[inline(never)]
     #[expect(invalid_value, clippy::uninit_assumed_init)]
     pub fn new_uninit() -> Self {
         Self {
             state: unsafe { MaybeUninit::uninit().assume_init() },
-            is_uninit: true,
         }
     }
 
     #[inline(never)]
-    pub fn assign(&mut self, datas: &[u64; 25]) {
-        self.state[..].copy_from_slice(datas);
+    pub fn assign(&mut self, data: &[u64; 25]) {
+        self.state[..].copy_from_slice(data);
     }
 }
-pub fn uninit_it(idx: usize) -> u64 {
-    let a = ZeroInit::new();
-    a.state[idx]
+
+pub fn init_it(data: &[u64; 25]) -> ZeroInit {
+    // let mut a = std::hint::black_box(ZeroInit::new());
+    let mut a = ZeroInit::new();
+    crate::black_box::better_black_box(a.state.as_ptr() as u64);
+
+    a.assign(data);
+    a
+}
+
+pub fn uninit_it(data: &[u64; 25]) -> ZeroInit {
+    // let mut a = std::hint::black_box(ZeroInit::new_uninit());
+    let mut a = ZeroInit::new_uninit();
+    crate::black_box::better_black_box(a.state.as_ptr() as u64);
+    a.assign(data);
+    a
 }

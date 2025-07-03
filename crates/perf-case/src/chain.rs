@@ -1,4 +1,6 @@
 const LENGTH: usize = 65536;
+// const LENGTH: usize = 33;
+// const LENGTH: usize = 32;
 
 #[derive(Clone, Debug)]
 pub struct ChainState {
@@ -28,10 +30,17 @@ impl ChainState {
 
     pub fn update(&mut self) {
         update_data::update(&mut self.state);
+        // update(&mut self.state);
     }
 
     pub fn finalize(self) -> u64 {
         self.state.into_iter().sum()
+    }
+}
+
+pub fn update(state: &mut [u64]) {
+    for ele in state {
+        *ele = ele.pow(2);
     }
 }
 
