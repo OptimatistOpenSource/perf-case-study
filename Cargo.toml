@@ -11,9 +11,15 @@ repository = ""
 
 [workspace.dependencies]
 criterion = "0.6.0"
-rand = "0.9.1"
 update-data = { path = "./crates/update-data" }
 
+[profile.release]
+lto = true
+
 [profile.profiling]
+inherits = "release"
+debug = true
+
+[profile.bench]
 inherits = "release"
 debug = true
