@@ -17,9 +17,14 @@ impl ZeroInit {
         }
     }
 
-    #[inline(never)]
+    // #[inline(never)]
     pub fn assign(&mut self, data: &[u64; 25]) {
         self.state[..].copy_from_slice(data);
+    }
+
+    // #[inline(never)]
+    pub fn assign_3rd(&mut self, data: &[u64; 25]) {
+        update_data::assign(&mut self.state, data);
     }
 }
 
