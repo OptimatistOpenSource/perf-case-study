@@ -1,10 +1,6 @@
-use std::hint::black_box;
-
-use perf_case::zero_init::ZeroInit;
+use perf_case::zero_init::init_it;
 
 fn main() {
-    let arr = black_box([1; 25]);
-    let mut zero = black_box(ZeroInit::new());
-    zero.assign(&arr);
-    black_box(zero);
+    let arr = [1; 25];
+    dbg!(init_it(&arr));
 }

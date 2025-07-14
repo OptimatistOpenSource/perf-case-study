@@ -2,7 +2,7 @@ const LENGTH: usize = 65536;
 // const LENGTH: usize = 33;
 // const LENGTH: usize = 32;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ChainState {
     pub state: [u64; LENGTH],
 }
@@ -44,6 +44,8 @@ pub fn update(state: &mut [u64]) {
     }
 }
 
+// #[inline(always)]
+#[inline(never)]
 pub fn many_chain(arg: ChainState) -> u64 {
     arg.chain()
         .chain()
@@ -55,6 +57,7 @@ pub fn many_chain(arg: ChainState) -> u64 {
         .finalize()
 }
 
+#[inline(never)]
 pub fn many_chain_refm(mut arg: ChainState) -> u64 {
     arg.chain_refm()
         .chain_refm()

@@ -14,7 +14,11 @@ criterion = "0.6.0"
 update-data = { path = "./crates/update-data" }
 
 [profile.release]
-# lto = true
+debug = 2
+
+[profile.release-lto]
+inherits = "release"
+lto = true
 
 [profile.profiling]
 inherits = "release"

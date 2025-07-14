@@ -1,9 +1,7 @@
-use std::hint::black_box;
-
-use perf_case::chain::ChainState;
+use perf_case::chain::{ChainState, many_chain_refm};
 
 fn main() {
-    let state = black_box(ChainState::new());
-    let a = perf_case::chain::many_chain_refm(state);
-    black_box(a);
+    let state = ChainState::new();
+    let a = many_chain_refm(state);
+    dbg!(a);
 }
