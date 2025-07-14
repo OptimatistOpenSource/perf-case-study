@@ -1,15 +1,12 @@
 #import "@preview/touying:0.6.1": *
 #import "@preview/zebraw:0.5.5": *
-#show: zebraw
+#import "@preview/relescope:0.0.2": pick
+#show: zebraw-init.with(
+  highlight-color: blue.lighten(70%),
+  background-color: luma(240),
+  comment-flag: ">>",
+)
 #import themes.metropolis: *
-
-// #import "@preview/codly:1.3.0": *
-// #import "@preview/codly-languages:0.1.8": *
-// #show: codly-init.with()
-// #codly(
-//   number-format: none,
-//   languages: codly-languages
-// )
 
 #import "@preview/numbly:0.1.0": numbly
 
@@ -26,47 +23,53 @@
   ),
 )
 
+#set quote(block: true)
+#show quote.where(block: true): block.with(width: 100%, fill: luma(235), outset: .5em, radius: .2em)
 #show footnote.entry: set text(size: 8pt)
-
-// #set heading(numbering: numbly("{1}.", default: "1.1"))
-
 #show link: underline
 #set text(15pt)
 
-#title-slide(logo: image("assets/optimatist.png", height: 10%))
+// #set heading(numbering: numbly("{1}.", default: "1.1"))
 
-// 以下测试在 intel i5-14400F 平台测试，此平台有 avx2 功能。
+#title-slide(logo: image("assets/optimatist.png", height: 10%))
 
 #focus-slide[
   = `Default` trait 对性能造成的影响
 ]
 
+#let cg_toml_path = "./Cargo.toml"
+#let cg_toml = raw(read(cg_toml_path), lang: "toml", block: true)
+
+#let config_toml_path = "./.cargo/config.toml"
+#let config_toml = raw(read(config_toml_path), lang: "toml", block: true)
+
+#let hp = "path: "
+#let zero_src_path = "./crates/perf-case/src/zero_init.rs"
+#let zero_src = raw(read(zero_src_path), lang: "rust", block: true)
+#let update_data_src_path = "./crates/update-data/src/lib.rs"
+#let update_data_src = raw(read(update_data_src_path), lang: "rust", block: true)
+
 #slide(composer: (1fr, auto))[
   #set text(.95em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  ```rust
-  // ./crates/perf-case/src/zero_init.rs
-  #[derive(Default, Clone, Copy, Debug)]
-  pub struct ZeroInit {
-      state: [u64; 25],
-  }
+  #let zero_struct = pick(zero_src.text, "ZeroInit", lang: zero_src.lang)
+  #zebraw(
+    header: hp + zero_src_path,
+    raw(zero_struct.src, lang: zero_src.lang, block: true),
+    numbering-offset: zero_struct.first_line - 1,
+  )
+  #zebraw(zero_src, line-range: (8, 9))
+  #zebraw(zero_src, line-range: (22, 26))
 
-  impl ZeroInit {
-      pub fn assign_3rd(&mut self, data: &[u64; 25]) {
-          update_data::assign(&mut self.state, data);
-      }
-  }
-  ```
+  其中 `assign` 是来自另一个 update-data crate 的函数
 
-  ```rust
-  // 来自另一个 update-data crate
-  // ./crates/update-data/src/lib.rs
-  #[cfg_attr(feature = "inline", inline(always))]
-  pub fn assign(state: &mut [u64; 25], data: &[u64; 25]) {
-      state.copy_from_slice(data);
-  }
-  ```
+  #let assign = pick(update_data_src.text, "assign", lang: update_data_src.lang)
+  #zebraw(
+    header: hp + update_data_src_path,
+    raw(assign.src, lang: update_data_src.lang, block: true),
+    numbering-offset: assign.first_line - 1,
+  )
 
   这样一段代码，使用 `Default` 为 `ZeroInit` 全零初始化会有什么问题？
 ]
@@ -78,78 +81,47 @@
   #grid(columns: 2, gutter: 3em)[
     构建一个 bin 来观察它的汇编。
 
-    ```rust
-    // ./crates/perf-case/src/zero_init.rs
-    #[inline(never)]
-    pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-        let mut a = ZeroInit::default();
+    // 其中指定目标 cpu 为 native，测试机器 cpu 为 Intel i5-14400F 有 avx2 指令集。
 
-        a.assign_3rd(data);
-        a
-    }
-    ```
+    #zebraw(
+      header: hp + config_toml_path,
+      line-range: (1, 3),
+      raw(
+        config_toml.text,
+        lang: config_toml.lang,
+        block: true,
+      ),
+      highlight-lines: (
+        (2, [指定目标 cpu 为 native，测试机器 cpu 为 Intel i5-14400F 有 avx2 指令集。]),
+      ),
+    )
 
-    ```rust
-    // ./crates/perf-case/src/bin/zero_init.rs
-    use perf_case::zero_init::init_it;
+    接下来使用 #raw("cargo b -r", lang: "bash") 构建。
 
-    fn main() {
-        let arr = [1; 25];
-        init_it(&arr);
-    }
-    ```
+    #let zero_init = pick(zero_src.text, "init_it", lang: zero_src.lang)
+    #zebraw(
+      header: hp + zero_src_path,
+      raw(zero_init.src, lang: zero_src.lang, block: true),
+      numbering-offset: zero_init.first_line - 1,
+    )
 
-    使用 #raw("rust-objdump -SldC target/release/zero_init", lang: "bash") 命令查看其汇编。
+    #let zero_init_bin_path = "./crates/perf-case/src/bin/zero_init.rs"
+    #let zero_init_bin = raw(read(zero_init_bin_path), lang: "rust", block: true)
+    #zebraw(zero_init_bin, header: hp + zero_init_bin_path, highlight-lines: (
+      (5, [这里将 `init_it` 的返回值传递给 `dbg!` 宏防止其被优化。]) // zebraw bug 不能显示注释。
+    ))
+
+    这里将 `init_it` 的返回值传递给 `dbg!` 宏防止其被优化。
+
+    使用 #raw("rust-objdump -SldCRT target/release/zero_init", lang: "bash") 命令查看其汇编。
   ][
     #set text(.70em)
 
-    // #show: columns.with(2, gutter: 3em)
+    #let zero_init_bin = raw(read("./assets/bin-asm/zero_init.s"), lang: "asm", block: true)
+    #zebraw(zero_init_bin, line-range: (1, 47), highlight-lines: (14, [清零操作]))
 
-    ```asm
-    00000000000141a0 <perf_case::zero_init::init_it::hea2e57095669a05f>:
-    ; perf_case::zero_init::init_it::hea2e57095669a05f():
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-    ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-       141a0: 53                            pushq   %rbx
-       141a1: 48 81 ec d0 00 00 00          subq    $0xd0, %rsp
-       141a8: 48 89 fb                      movq    %rdi, %rbx
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/mod.rs:477
-    ;                 [$t::default(), $($ts::default()),*]
-       141ab: c5 f8 57 c0                   vxorps  %xmm0, %xmm0, %xmm0
-       141af: c5 fc 11 84 24 a0 00 00 00    vmovups %ymm0, 0xa0(%rsp)
-       141b8: c5 fc 11 84 24 80 00 00 00    vmovups %ymm0, 0x80(%rsp)
-       141c1: c5 fc 11 44 24 60             vmovups %ymm0, 0x60(%rsp)
-       141c7: c5 fc 11 44 24 40             vmovups %ymm0, 0x40(%rsp)
-       141cd: c5 fc 11 44 24 20             vmovups %ymm0, 0x20(%rsp)
-       141d3: c5 fc 11 04 24                vmovups %ymm0, (%rsp)
-       141d8: 48 c7 84 24 c0 00 00 00 00 00 00 00   movq    $0x0, 0xc0(%rsp)
-       141e4: 48 89 e7                      movq    %rsp, %rdi
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:23
-    ;         update_data::assign(&mut self.state, data);
-       141e7: c5 f8 77                      vzeroupper
-       141ea: ff 15 40 04 04 00             callq   *0x40440(%rip)          # 0x54630 <_GLOBAL_OFFSET_TABLE_+0x48>
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:32
-    ;     a
-       141f0: 48 8b 84 24 c0 00 00 00       movq    0xc0(%rsp), %rax
-       141f8: 48 89 83 c0 00 00 00          movq    %rax, 0xc0(%rbx)
-       141ff: c5 fc 10 84 24 a0 00 00 00    vmovups 0xa0(%rsp), %ymm0
-       14208: c5 fc 11 83 a0 00 00 00       vmovups %ymm0, 0xa0(%rbx)
-       14210: c5 fc 10 84 24 80 00 00 00    vmovups 0x80(%rsp), %ymm0
-       14219: c5 fc 11 83 80 00 00 00       vmovups %ymm0, 0x80(%rbx)
-       14221: c5 fc 10 04 24                vmovups (%rsp), %ymm0
-       14226: c5 fc 10 4c 24 20             vmovups 0x20(%rsp), %ymm1
-       1422c: c5 fc 10 54 24 40             vmovups 0x40(%rsp), %ymm2
-       14232: c5 fc 10 5c 24 60             vmovups 0x60(%rsp), %ymm3
-       14238: c5 fc 11 5b 60                vmovups %ymm3, 0x60(%rbx)
-       1423d: c5 fc 11 53 40                vmovups %ymm2, 0x40(%rbx)
-       14242: c5 fc 11 4b 20                vmovups %ymm1, 0x20(%rbx)
-       14247: c5 fc 11 03                   vmovups %ymm0, (%rbx)
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-    ; }
-    ```
-
-    其中有一条 #raw("vxorps  %xmm0, %xmm0, %xmm0", lang: "asm") 清零操作。
-    并且调用 `update_data::assign` 前后都有数据拷贝。
+    - 其中有一条 #raw("vxorps  %xmm0, %xmm0, %xmm0", lang: "asm") 清零操作。
+    - 它把 `ymm0` 清零后向栈上写入，在调用 `assign` 之后又又将栈的数据复制回 `ymm*` 寄存器。
   ]
 ]
 
@@ -157,52 +129,22 @@
   #set text(.50em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  ```rust
-  impl ZeroInit {
-      #[expect(invalid_value, clippy::uninit_assumed_init)]
-      pub fn new_uninit() -> Self {
-          Self {
-              state: unsafe { MaybeUninit::uninit().assume_init() },
-          }
-      }
-  }
-  ```
+  #zebraw(header: hp + zero_src_path, zero_src, line-range: (8, 15), highlight-lines: range(10, 15))
+
+  对于上个例子，我们知道清零操作是完全没有必要的，它立即就会被覆盖掉。
+  这里可以添加另一个方法来避免清零操作。
   #footnote[
     这个 `MaybeUninit` 使用方式在rust里面被定义为 UB，Rust 使用未初始化数据非常困难。
   ]
 
-  对于上个例子，我们知道清零操作是完全没有必要的，它立即就会被覆盖掉。
-  这里可以手动添加另一个方法。
+  #let uninit_path = "./crates/perf-case/src/bin/zero_uninit.rs"
+  #let struct_zero_init = raw(read(uninit_path), lang: "rust", block: true)
+  #zebraw(struct_zero_init, header: hp + uninit_path)
 
-  ```rust
-  // ./crates/perf-case/src/bin/zero_uninit.rs
-  use perf_case::zero_init::uninit_it;
+  使用 #raw("rust-objdump -SldCRT target/release/zero_uninit", lang: "bash") 命令查看其汇编。
 
-  fn main() {
-      let arr = [1; 25];
-      uninit_it(&arr);
-  }
-  ```
-
-  使用 #raw("rust-objdump -SldC target/release/zero_uninit", lang: "bash") 命令查看其汇编。
-
-  ```asm
-  00000000000141b0 <perf_case::zero_init::uninit_it::h1f640c62abb13c34>:
-  ; perf_case::zero_init::uninit_it::h1f640c62abb13c34():
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:36
-  ; pub fn uninit_it(data: &[u64; 25]) -> ZeroInit {
-     141b0: 53                            pushq   %rbx
-     141b1: 48 89 fb                      movq    %rdi, %rbx
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:23
-  ;         update_data::assign(&mut self.state, data);
-     141b4: ff 15 d6 03 04 00             callq   *0x403d6(%rip)          # 0x54590 <_GLOBAL_OFFSET_TABLE_+0x48>
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:40
-  ; }
-     141ba: 48 89 d8                      movq    %rbx, %rax
-     141bd: 5b                            popq    %rbx
-     141be: c3                            retq
-     141bf: 00 48 8b                      addb    %cl, -0x75(%rax)
-  ```
+  #let struct_zero_init = raw(read("./assets/bin-asm/zero_uninit.s"), lang: "asm", block: true)
+  #zebraw(struct_zero_init, line-range: (1, 19))
 
   没有了之前的数据清零和拷贝。
 ]
@@ -213,28 +155,10 @@
 
   使用 `criterion` 框架进行基准测试。
 
-  #grid(columns: (auto, 67%), gutter: 2em)[
-    ```rust
-    // ./crates/perf-case/benches/zero_init.rs
-    fn bench_zero_init(c: &mut Criterion) {
-        let arr = [0; 25];
-
-        let mut group = c.benchmark_group("Zero");
-
-        group.bench_with_input("init", &arr, |b, datas| {
-            b.iter(|| {
-                black_box(zero_init::init_it(datas));
-            });
-        });
-        group.bench_with_input("uninit", &arr, |b, datas| {
-            b.iter(|| {
-                black_box(zero_init::uninit_it(datas));
-            });
-        });
-
-        group.finish();
-    }
-    ```
+  #grid(columns: (auto, 64%), gutter: 2em)[
+    #let bench_src = raw(read("crates/perf-case/benches/zero_init.rs"), lang: "rust", block: true)
+    #let bench = pick(bench_src.text, "bench_zero_init", lang: bench_src.lang)
+    #zebraw(raw(bench.src, lang: bench_src.lang, block: true), numbering-offset: bench.first_line - 1)
   ][
     运行 #raw("taskset --cpu-list 0 cargo bench -- Zero", lang: "bash")
 
@@ -253,6 +177,10 @@
       [uninit], [2.8101],
       table.hline(),
     )
+
+    #footnote[
+      数据会有波动，尤其这种很小的测试
+    ]
   ]
 ]
 
@@ -262,70 +190,18 @@
   #set text(.65em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  #raw("rust-objdump -SldC target/release/deps/zero_init-4bd469cda42c17ad", lang: "bash")
+  #raw("rust-objdump -SldCRT target/release/deps/zero_init-4bd469cda42c17ad", lang: "bash")
 
+  #let zero_init_bin = raw(read("assets/bench-asm/zero_init.s"), lang: "asm", block: true)
   #grid(columns: 2, gutter: 5em)[
     #set text(.65em)
-    ```asm
-    00000000000d0740 <perf_case::zero_init::init_it::hea2e57095669a05f>:
-    ; perf_case::zero_init::init_it::hea2e57095669a05f():
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-    ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-       d0740: 53                           	pushq	%rbx
-       d0741: 48 81 ec d0 00 00 00         	subq	$0xd0, %rsp
-       d0748: 48 89 fb                     	movq	%rdi, %rbx
-    ; /path.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/mod.rs:477
-    ;                 [$t::default(), $($ts::default()),*]
-       d074b: c5 f8 57 c0                  	vxorps	%xmm0, %xmm0, %xmm0
-       d074f: c5 fc 11 84 24 a0 00 00 00   	vmovups	%ymm0, 0xa0(%rsp)
-       d0758: c5 fc 11 84 24 80 00 00 00   	vmovups	%ymm0, 0x80(%rsp)
-       d0761: c5 fc 11 44 24 60            	vmovups	%ymm0, 0x60(%rsp)
-       d0767: c5 fc 11 44 24 40            	vmovups	%ymm0, 0x40(%rsp)
-       d076d: c5 fc 11 44 24 20            	vmovups	%ymm0, 0x20(%rsp)
-       d0773: c5 fc 11 04 24               	vmovups	%ymm0, (%rsp)
-       d0778: 48 c7 84 24 c0 00 00 00 00 00 00 00  	movq	$0x0, 0xc0(%rsp)
-       d0784: 48 89 e7                     	movq	%rsp, %rdi
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:23
-    ;         update_data::assign(&mut self.state, data);
-       d0787: c5 f8 77                     	vzeroupper
-       d078a: ff 15 00 35 20 00            	callq	*0x203500(%rip)         # 0x2d3c90 <_GLOBAL_OFFSET_TABLE_+0x40>
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:32
-    ;     a
-       d0790: 48 8b 84 24 c0 00 00 00      	movq	0xc0(%rsp), %rax
-       d0798: 48 89 83 c0 00 00 00         	movq	%rax, 0xc0(%rbx)
-       d079f: c5 fc 10 84 24 a0 00 00 00   	vmovups	0xa0(%rsp), %ymm0
-       d07a8: c5 fc 11 83 a0 00 00 00      	vmovups	%ymm0, 0xa0(%rbx)
-       d07b0: c5 fc 10 84 24 80 00 00 00   	vmovups	0x80(%rsp), %ymm0
-       d07b9: c5 fc 11 83 80 00 00 00      	vmovups	%ymm0, 0x80(%rbx)
-       d07c1: c5 fc 10 04 24               	vmovups	(%rsp), %ymm0
-       d07c6: c5 fc 10 4c 24 20            	vmovups	0x20(%rsp), %ymm1
-       d07cc: c5 fc 10 54 24 40            	vmovups	0x40(%rsp), %ymm2
-       d07d2: c5 fc 10 5c 24 60            	vmovups	0x60(%rsp), %ymm3
-       d07d8: c5 fc 11 5b 60               	vmovups	%ymm3, 0x60(%rbx)
-       d07dd: c5 fc 11 53 40               	vmovups	%ymm2, 0x40(%rbx)
-       d07e2: c5 fc 11 4b 20               	vmovups	%ymm1, 0x20(%rbx)
-       d07e7: c5 fc 11 03                  	vmovups	%ymm0, (%rbx)
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-    ; }
-    ```
+    #zebraw(zero_init_bin, line-range: (1, 3))
+
+    #zebraw(zero_init_bin, line-range: (4, 47))
   ][
-    ```asm
-    00000000000d0800 <perf_case::zero_init::uninit_it::h1f640c62abb13c34>:
-    ; perf_case::zero_init::uninit_it::h1f640c62abb13c34():
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:36
-    ; pub fn uninit_it(data: &[u64; 25]) -> ZeroInit {
-       d0800: 53                           	pushq	%rbx
-       d0801: 48 89 fb                     	movq	%rdi, %rbx
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:23
-    ;         update_data::assign(&mut self.state, data);
-       d0804: ff 15 86 34 20 00            	callq	*0x203486(%rip)         # 0x2d3c90 <_GLOBAL_OFFSET_TABLE_+0x40>
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:40
-    ; }
-       d080a: 48 89 d8                     	movq	%rbx, %rax
-       d080d: 5b                           	popq	%rbx
-       d080e: c3                           	retq
-       d080f: 00 48 8b                     	addb	%cl, -0x75(%rax)
-    ```
+    #zebraw(zero_init_bin, line-range: (1, 3))
+
+    #zebraw(zero_init_bin, line-range: (48, 64))
   ]
 
   与之前 bin 的观察是一致的，init 版本多了很多的拷贝指令。
@@ -333,193 +209,81 @@
 
 #focus-slide[
   == 内联 `update_data::assign`
+
+  由于跨 crate 进行调用，即使是 `update_data::assign` 这样非常小的函数都没有被内联。
+
+  为其标注 inline 那么它会生成什么样的汇编？
 ]
 
 #slide(composer: (1fr, auto))[
   #set text(.65em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
-
-  由于跨 crate 进行调用，即使是 `update_data::assign` 这样非常小的函数都没有被内联。
-
-  为其标注 inline 那么它会生成什么样的汇编？
 
   #raw("cargo b -r --features inline", lang: "bash")
 
   #grid(columns: 2, gutter: 5em)[
     #set text(.75em)
-    #raw("rust-objdump -SldC target/release/zero_init", lang: "bash")
+    #raw("rust-objdump -SldCRT target/release/zero_init", lang: "bash")
 
-    ```asm
-    0000000000014a60 <perf_case::zero_init::uninit_it::h550f1e90574c123c>:
-    ; perf_case::zero_init::uninit_it::h550f1e90574c123c():
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-    ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-       14a60: 48 89 f8                      movq    %rdi, %rax
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-    ;     unsafe { copy_nonoverlapping(src, dst, count) }
-       14a63: 48 8b 8e c0 00 00 00          movq    0xc0(%rsi), %rcx
-       14a6a: 48 89 8f c0 00 00 00          movq    %rcx, 0xc0(%rdi)
-       14a71: c5 fc 10 86 a0 00 00 00       vmovups 0xa0(%rsi), %ymm0
-       14a79: c5 fc 11 87 a0 00 00 00       vmovups %ymm0, 0xa0(%rdi)
-       14a81: c5 fc 10 86 80 00 00 00       vmovups 0x80(%rsi), %ymm0
-       14a89: c5 fc 11 87 80 00 00 00       vmovups %ymm0, 0x80(%rdi)
-       14a91: c5 fc 10 06                   vmovups (%rsi), %ymm0
-       14a95: c5 fc 10 4e 20                vmovups 0x20(%rsi), %ymm1
-       14a9a: c5 fc 10 56 40                vmovups 0x40(%rsi), %ymm2
-       14a9f: c5 fc 10 5e 60                vmovups 0x60(%rsi), %ymm3
-       14aa4: c5 fc 11 5f 60                vmovups %ymm3, 0x60(%rdi)
-       14aa9: c5 fc 11 57 40                vmovups %ymm2, 0x40(%rdi)
-       14aae: c5 fc 11 4f 20                vmovups %ymm1, 0x20(%rdi)
-       14ab3: c5 fc 11 07                   vmovups %ymm0, (%rdi)
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-    ; }
-       14ab7: c5 f8 77                      vzeroupper
-       14aba: c3                            retq
-       14abb: 00 00                         addb    %al, (%rax)
-       14abd: 00 00                         addb    %al, (%rax)
-       14abf: 00 55 48                      addb    %dl, 0x48(%rbp)
-    ```
+    #let zero_init_bin = raw(read("./assets/bin-asm-inline/zero_init.s"), lang: "asm", block: true)
+    #zebraw(zero_init_bin, line-range: (1, 4))
+    #zebraw(zero_init_bin, line-range: (54, 82))
+
   ][
     #set text(.75em)
-    #raw("rust-objdump -SldC target/release/zero_uninit", lang: "bash")
+    #raw("rust-objdump -SldCRT target/release/zero_uninit", lang: "bash")
 
-    ```asm
-    0000000000014a60 <perf_case::zero_init::uninit_it::h550f1e90574c123c>:
-    ; perf_case::zero_init::uninit_it::h550f1e90574c123c():
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-    ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-       14a60: 48 89 f8                      movq    %rdi, %rax
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-    ;     unsafe { copy_nonoverlapping(src, dst, count) }
-       14a63: 48 8b 8e c0 00 00 00          movq    0xc0(%rsi), %rcx
-       14a6a: 48 89 8f c0 00 00 00          movq    %rcx, 0xc0(%rdi)
-       14a71: c5 fc 10 86 a0 00 00 00       vmovups 0xa0(%rsi), %ymm0
-       14a79: c5 fc 11 87 a0 00 00 00       vmovups %ymm0, 0xa0(%rdi)
-       14a81: c5 fc 10 86 80 00 00 00       vmovups 0x80(%rsi), %ymm0
-       14a89: c5 fc 11 87 80 00 00 00       vmovups %ymm0, 0x80(%rdi)
-       14a91: c5 fc 10 06                   vmovups (%rsi), %ymm0
-       14a95: c5 fc 10 4e 20                vmovups 0x20(%rsi), %ymm1
-       14a9a: c5 fc 10 56 40                vmovups 0x40(%rsi), %ymm2
-       14a9f: c5 fc 10 5e 60                vmovups 0x60(%rsi), %ymm3
-       14aa4: c5 fc 11 5f 60                vmovups %ymm3, 0x60(%rdi)
-       14aa9: c5 fc 11 57 40                vmovups %ymm2, 0x40(%rdi)
-       14aae: c5 fc 11 4f 20                vmovups %ymm1, 0x20(%rdi)
-       14ab3: c5 fc 11 07                   vmovups %ymm0, (%rdi)
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-    ; }
-       14ab7: c5 f8 77                      vzeroupper
-       14aba: c3                            retq
-       14abb: 00 00                         addb    %al, (%rax)
-       14abd: 00 00                         addb    %al, (%rax)
-       14abf: 00 55 48                      addb    %dl, 0x48(%rbp)
-    ```
+    #let zero_init_bin = raw(read("assets/bin-asm-inline/zero_uninit.s"), lang: "asm", block: true)
+    #zebraw(zero_init_bin, line-range: (1, 4))
+    #zebraw(zero_init_bin, line-range: (54, 82))
   ]
 
-  这次它们生成了相同的汇编。
+  它们生成了相同的汇编。
 ]
 
 #slide(composer: (1fr, auto))[
   #set text(.65em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  再看一眼基准测试：
+  #grid(columns: 2, gutter: 5em)[
+    #set text(.90em)
 
-  #raw("taskset --cpu-list 0 cargo bench --features inline -- Zero", lang: "bash")
+    #raw("rust-objdump -SldCRT target/release/deps/zero_init-f2a5664f52a235d3", lang: "bash")
 
-  #image("assets/zero-inline-violin.svg")
-  #set text(.75em)
+    #let zero_init_bench = raw(read("assets/bench-asm-inline/zero_init.s"), lang: "asm", block: true)
+    #zebraw(zero_init_bench, line-range: (81, 109))
 
-  #show: columns.with(2, gutter: 3em)
+    与 bin 是同样的汇编。
+  ][
+    #raw("taskset --cpu-list 0 cargo bench --features inline -- Zero", lang: "bash")
 
-  #raw("rust-objdump -SldC target/release/deps/zero_init-f2a5664f52a235d3", lang: "bash")
-  ```asm
-  0000000000014a60 <perf_case::zero_init::uninit_it::h550f1e90574c123c>:
-  ; perf_case::zero_init::uninit_it::h550f1e90574c123c():
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-  ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-     14a60: 48 89 f8                      movq    %rdi, %rax
-  ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-  ;     unsafe { copy_nonoverlapping(src, dst, count) }
-     14a63: 48 8b 8e c0 00 00 00          movq    0xc0(%rsi), %rcx
-     14a6a: 48 89 8f c0 00 00 00          movq    %rcx, 0xc0(%rdi)
-     14a71: c5 fc 10 86 a0 00 00 00       vmovups 0xa0(%rsi), %ymm0
-     14a79: c5 fc 11 87 a0 00 00 00       vmovups %ymm0, 0xa0(%rdi)
-     14a81: c5 fc 10 86 80 00 00 00       vmovups 0x80(%rsi), %ymm0
-     14a89: c5 fc 11 87 80 00 00 00       vmovups %ymm0, 0x80(%rdi)
-     14a91: c5 fc 10 06                   vmovups (%rsi), %ymm0
-     14a95: c5 fc 10 4e 20                vmovups 0x20(%rsi), %ymm1
-     14a9a: c5 fc 10 56 40                vmovups 0x40(%rsi), %ymm2
-     14a9f: c5 fc 10 5e 60                vmovups 0x60(%rsi), %ymm3
-     14aa4: c5 fc 11 5f 60                vmovups %ymm3, 0x60(%rdi)
-     14aa9: c5 fc 11 57 40                vmovups %ymm2, 0x40(%rdi)
-     14aae: c5 fc 11 4f 20                vmovups %ymm1, 0x20(%rdi)
-     14ab3: c5 fc 11 07                   vmovups %ymm0, (%rdi)
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-  ; }
-     14ab7: c5 f8 77                      vzeroupper
-     14aba: c3                            retq
-     14abb: 00 00                         addb    %al, (%rax)
-     14abd: 00 00                         addb    %al, (%rax)
-     14abf: 00 55 48                      addb    %dl, 0x48(%rbp)
-  ```
-
-  与 bin 是同样的汇编。#footnote[基准测试和 bin 有可能生成不同的汇编]
+    #image("assets/zero-inline-violin.svg")
+  ]
 ]
 
 #focus-slide[
   == 开启 lto (`Default` trait)
+
+  如果 crate 作者并没有为一些函数标注 inline，使用者也不想 patch 依赖，lto 在一定程度上可以做到和 inline 相同的效果。
 ]
 
 #slide(composer: (1fr, auto))[
   #set text(.65em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  如果 crate 作者并没有为一些函数标注 inline，使用者也不想 patch 依赖，lto 在一定程度上可以做到和 inline 相同的效果。
-
-  ```toml
-  # ./Cargo.toml
-  [profile.release-lto]
-  inherits = "release"
-  lto = true
-  ```
+  #let cargo = raw(read("Cargo.toml"), lang: "toml", block: true)
+  #zebraw(cargo, line-range: (19, 22))
 
   #raw("cargo b --profile release-lto", lang: "bash")
 
   #grid(columns: 2, gutter: 5em)[
-
-    #raw("rust-objdump -SldCRT target/release-lto/zero_init", lang: "bash")
-
-    ```asm
-    000000000004df28 R_X86_64_GLOB_DAT        memcpy
-    ……
-    000000000000e780 <perf_case::zero_init::init_it::hd1189aaa6ae199a2>:
-    ; perf_case::zero_init::init_it::hd1189aaa6ae199a2():
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-    ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-        e780: 50                            pushq   %rax
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-    ;     unsafe { copy_nonoverlapping(src, dst, count) }
-        e781: ba c8 00 00 00                movl    $0xc8, %edx
-        e786: ff 15 9c f7 03 00             callq   *0x3f79c(%rip)          # 0x4df28 <_GLOBAL_OFFSET_TABLE_+0x118>
-    ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-    ; }
-        e78c: 58                            popq    %rax
-        e78d: c3                            retq
-    ```
+    #raw("rust-objdump -SldCRTRT target/release-lto/zero_init", lang: "bash")
+    #let chain_lib_src = raw(read("./assets/bin-asm-lto/zero_init.s"), lang: "rust", block: true)
+    #zebraw(chain_lib_src)
   ][
-
-    #raw("rust-objdump -SldCRT target/release-lto/zero_uninit", lang: "bash")
-
-    ```asm
-    000000000004df28 R_X86_64_GLOB_DAT        memcpy
-    ……
-    000000000000e780 <perf_case::zero_init::uninit_it::h1ab68d0cbbeaf12b>:
-    ; perf_case::zero_init::uninit_it::h1ab68d0cbbeaf12b():
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-    ;     unsafe { copy_nonoverlapping(src, dst, count) }
-        e780: ba c8 00 00 00                movl    $0xc8, %edx
-        e785: ff 25 9d f7 03 00             jmpq    *0x3f79d(%rip)          # 0x4df28 <_GLOBAL_OFFSET_TABLE_+0x118>
-    ```
+    #raw("rust-objdump -SldCRTRT target/release-lto/zero_uninit", lang: "bash")
+    #let chain_lib_src = raw(read("./assets/bin-asm-lto/zero_uninit.s"), lang: "rust", block: true)
+    #zebraw(chain_lib_src)
   ]
 
 
@@ -536,34 +300,14 @@
 
   #image("assets/zero-lto-violin.svg", height: 20%)
 
-  #raw("rust-objdump -SldCRT target/release-lto/deps/zero_init-8306fa691d6b3444", lang: "bash")
+  #raw("rust-objdump -SldCRTRT target/release-lto/deps/zero_init-8306fa691d6b3444", lang: "bash")
 
-  ```asm
-  0000000000280fc0 R_X86_64_GLOB_DAT        memcpy
-  ……
-  000000000013b2c0 <perf_case::zero_init::init_it::hd1189aaa6ae199a2>:
-  ; perf_case::zero_init::init_it::hd1189aaa6ae199a2():
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:28
-  ; pub fn init_it(data: &[u64; 25]) -> ZeroInit {
-    13b2c0: 50                            pushq   %rax
-  ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-  ;     unsafe { copy_nonoverlapping(src, dst, count) }
-    13b2c1: ba c8 00 00 00                movl    $0xc8, %edx
-    13b2c6: ff 15 f4 5c 14 00             callq   *0x145cf4(%rip)         # 0x280fc0 <_GLOBAL_OFFSET_TABLE_+0x438>
-  ; /path/perf-case-study/crates/perf-case/src/zero_init.rs:33
-  ; }
-    13b2cc: 58                            popq    %rax
-    13b2cd: c3                            retq
-    13b2ce: 66 90                         nop
-
-  000000000013b2d0 <perf_case::zero_init::uninit_it::h1ab68d0cbbeaf12b>:
-  ; perf_case::zero_init::uninit_it::h1ab68d0cbbeaf12b():
-  ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs:3753
-  ;     unsafe { copy_nonoverlapping(src, dst, count) }
-    13b2d0: ba c8 00 00 00                movl    $0xc8, %edx
-    13b2d5: ff 25 e5 5c 14 00             jmpq    *0x145ce5(%rip)         # 0x280fc0 <_GLOBAL_OFFSET_TABLE_+0x438>
-    13b2db: 0f 1f 44 00 00                nopl    (%rax,%rax)
-  ```
+  #let chain_lib_src = raw(read("./assets/bench-asm-lto/zero.s"), lang: "rust", block: true)
+  #grid(columns: 2, gutter: 3em)[
+    #zebraw(chain_lib_src, line-range: (1, 24))
+  ][
+    #zebraw(chain_lib_src, line-range: (25, 48))
+  ]
 
   与 bin 汇编一致。
 ]
@@ -572,6 +316,7 @@
   = 由于 move 造成了 memcpy
 ]
 
+#let chain_lib_src = raw(read("crates/perf-case/src/chain.rs"), lang: "rust", block: true)
 #slide(composer: (1fr, auto))[
   #set text(.80em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
@@ -579,132 +324,47 @@
   下面代码中 `chain` 方法有什么问题？
 
   #show: columns.with(2, gutter: 3em)
-  ```rust
-  // ./crates/perf-case/src/chain.rs
-  const LENGTH: usize = 65536;
 
-  pub struct ChainState {
-      pub state: [u64; LENGTH],
-  }
-
-  impl ChainState {
-      pub fn new() -> Self {
-          Self { state: [0; LENGTH] }
-      }
-
-      pub fn chain(mut self) -> Self {
-          self.update();
-          self
-      }
-
-      pub fn update(&mut self) {
-          update_data::update(&mut self.state);
-      }
-      pub fn finalize(self) -> u64 {
-          self.state.into_iter().sum()
-      }
-  }
-
-  #[inline(never)]
-  pub fn many_chain(arg: ChainState) -> u64 {
-      arg.chain()
-          .chain()
-          .chain()
-          .chain()
-          .chain()
-          .chain()
-          .chain()
-          .finalize()
-  }
-  ```
+  #zebraw(chain_lib_src, line-range: (1, 2))
+  #zebraw(chain_lib_src, line-range: (5, 9))
+  #zebraw(chain_lib_src, line-range: (16, 33))
+  #let chain = pick(chain_lib_src.text, "many_chain", lang: chain_lib_src.lang)
+  #zebraw(raw(chain.src, lang: zero_src.lang, block: true), numbering-offset: chain.first_line - 1)
 
   其中 `update_data::update` 是来自外部 crate 的函数。
 
-  ```rust
-  // ./crates/update-data/src/lib.rs
-  #[cfg_attr(feature = "inline", inline(always))]
-  pub fn update(state: &mut [u64]) {
-      for ele in state {
-          *ele = ele.pow(2);
-      }
-  }
-  ```
+  #let update = pick(update_data_src.text, "update", lang: update_data_src.lang)
+  #zebraw(raw(update.src, lang: update_data_src.lang, block: true), numbering-offset: chain.first_line - 1)
 ]
 
 #slide(composer: (1fr, auto))[
   #set text(.60em)
-  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
+  // #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
   构建一个 bin chain_move
 
-  ```rust
-  // ./crates/perf-case/src/bin/chain_move.rs
-  use perf_case::chain::{ChainState, many_chain};
+  #let chain_src = raw(read("crates/perf-case/src/bin/chain_move.rs"), lang: "rust", block: true)
+  #zebraw(chain_src, line-range: (1, 8))
 
-  fn main() {
-      let state = ChainState::new();
-      let a = many_chain(state);
-      dbg!(a);
-  }
-  ```
+  #raw("rust-objdump -SldCRTRT target/release/chain_move", lang: "bash")
 
-  #raw("rust-objdump -SldCRT target/release/chain_move", lang: "bash")
-
-  #set text(.80em)
+  #set text(.90em)
   #show: columns.with(2, gutter: 3em)
 
-  ```asm
-  0000000000054c10 R_X86_64_GLOB_DAT        memcpy
-  ……
-  0000000000007a20 <perf_case::chain::many_chain::h12412cd1860633f8>:
-  ; perf_case::chain::many_chain::h12412cd1860633f8():
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:48
-  ; pub fn many_chain(arg: ChainState) -> u64 {
-  ……
-      7a60: 4c 8b 3d a9 d1 04 00         	movq	0x4d1a9(%rip), %r15     # 0x54c10 <_GLOBAL_OFFSET_TABLE_+0x458>
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-  ……
-      7a72: 41 ff d7                     	callq	*%r15
-  ……
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-  ……
-      7a93: 41 ff d7                     	callq	*%r15
-  ……
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-  ……
-      7ab1: 41 ff d7                     	callq	*%r15
-  ……
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-  ……
-      7ad2: 41 ff d7                     	callq	*%r15
-  ……
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-  ……
-      7af0: 41 ff d7                     	callq	*%r15
-  ……
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-  ……
-      7b11: 41 ff d7                     	callq	*%r15
-  ……
-  ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-  ;         IntoIter { inner }
-      7b1f: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-  ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-      7b24: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-      7b29: 48 89 de                     	movq	%rbx, %rsi
-      7b2c: 41 ff d7                     	callq	*%r15
-      7b2f: 66 0f ef c0                  	pxor	%xmm0, %xmm0
-  ……
-  ```
+  #let path = "./assets/bin-asm/chain_move.s"
+  #let chain_asm = raw(read(path), lang: "asm", block: true)
+  #zebraw(chain_asm, line-range: (1, 4), header: [#path])
+  #zebraw(chain_asm, line-range: (5, 9))
+  #zebraw(chain_asm, line-range: (21, 28), highlight-lines: 27)
+  #zebraw(chain_asm, line-range: (33, 34))
+  #zebraw(chain_asm, line-range: (45, 46))
+  #zebraw(chain_asm, line-range: (57, 58))
+  #zebraw(chain_asm, line-range: (69, 70))
+  #zebraw(chain_asm, line-range: (81, 82))
+  #zebraw(chain_asm, line-range: (93, 94))
+  #zebraw(chain_asm, line-range: (99, 107), highlight-lines: 106)
 
-  共有七次 `memcpy` 调用
+  共有七次 `memcpy` 调用。
 ]
 
 #slide(composer: (1fr, auto))[
@@ -712,91 +372,33 @@
 
   把 `chain` 方法改为引用会发生什么？
 
-  ```rust
-  impl ChainState {
-      pub fn chain_refm(&mut self) -> &mut Self {
-          self.update();
-          self
-      }
-  }
-
-  #[inline(never)]
-  pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-      arg.chain_refm()
-          .chain_refm()
-          .chain_refm()
-          .chain_refm()
-          .chain_refm()
-          .chain_refm()
-          .chain_refm();
-      arg.finalize()
-  }
-  ```
+  #zebraw(chain_lib_src, line-range: (16, 17))
+  #zebraw(chain_lib_src, line-range: (34, 39))
+  #let zero_struct = pick(chain_lib_src.text, "many_chain_refm", lang: chain_lib_src.lang)
+  #zebraw(
+    raw(zero_struct.src, lang: zero_src.lang, block: true),
+    numbering-offset: zero_struct.first_line - 1,
+  )
 ]
 
 #slide(composer: (1fr, auto))[
   #set text(.60em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  构建一个 bin chain_refm
-
   #grid(columns: (30%, 70%), gutter: 3em)[
-    ```rust
-    // ./crates/perf-case/src/bin/chain_refm.rs
-    use perf_case::chain::{ChainState, many_chain_refm};
+    构建一个 bin chain_refm 来观察生成的汇编。
 
-    fn main() {
-        let state = ChainState::new();
-        let a = many_chain_refm(state);
-        dbg!(a);
-    }
-    ```
+    #let chain_bin_src = raw(read("./crates/perf-case/src/bin/chain_refm.rs"), lang: "rust", block: true)
+    #zebraw(chain_bin_src)
 
-    #raw("rust-objdump -SldCRT target/release/chain_move", lang: "bash")
+    #raw("rust-objdump -SldCRTRT target/release/chain_refm", lang: "bash")
   ][
     #set text(.90em)
 
-    ```asm
-    0000000000054c18 R_X86_64_GLOB_DAT        memcpy
-    ……
-    0000000000007a20 <perf_case::chain::many_chain_refm::ha6a6629d685d517b>:
-    ; perf_case::chain::many_chain_refm::ha6a6629d685d517b():
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:60
-    ; pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:32
-    ;         update_data::update(&mut self.state);
-        7a48: 4c 8d 35 f1 00 00 00          leaq    0xf1(%rip), %r14        # 0x7b40 <update_data::update::h5964edf586a94d9a>
-        7a4f: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a54: 41 ff d6                      callq   *%r14
-        7a57: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a5c: 48 89 df                      movq    %rbx, %rdi
-        7a5f: 41 ff d6                      callq   *%r14
-        7a62: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a67: 48 89 df                      movq    %rbx, %rdi
-        7a6a: 41 ff d6                      callq   *%r14
-        7a6d: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a72: 48 89 df                      movq    %rbx, %rdi
-        7a75: 41 ff d6                      callq   *%r14
-        7a78: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a7d: 48 89 df                      movq    %rbx, %rdi
-        7a80: 41 ff d6                      callq   *%r14
-        7a83: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a88: 48 89 df                      movq    %rbx, %rdi
-        7a8b: 41 ff d6                      callq   *%r14
-        7a8e: be 00 00 01 00                movl    $0x10000, %esi          # imm = 0x10000
-        7a93: 48 89 df                      movq    %rbx, %rdi
-        7a96: 41 ff d6                      callq   *%r14
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-        7a99: 48 8d 7c 24 18                leaq    0x18(%rsp), %rdi
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:68
-    ;     arg.finalize()
-        7a9e: ba 00 00 08 00                movl    $0x80000, %edx          # imm = 0x80000
-        7aa3: 48 89 de                      movq    %rbx, %rsi
-        7aa6: ff 15 6c d1 04 00             callq   *0x4d16c(%rip)          # 0x54c18 <_GLOBAL_OFFSET_TABLE_+0x460>
-    ……
-    ```
+    #let chain_bin_src = raw(read("./assets/bin-asm/chain_refm.s"), lang: "rust", block: true)
+    #zebraw(chain_bin_src, line-range: (1, 4))
+    #zebraw(chain_bin_src, line-range: (5, 7))
+    #zebraw(chain_bin_src, line-range: (19, 51), highlight-lines: 49)
 
     只有在 `finalize` 方法中有一次 `memcpy`。
   ]
@@ -808,16 +410,12 @@
   #set text(.60em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
-  ```rust
-  // ./crates/perf-case/benches/chain_call.rs
-  fn bench_chain_call(c: &mut Criterion) {
-      let arg = ChainState::new();
-      let mut group = c.benchmark_group("Chain call");
-
-      group.bench_function("move", |b| b.iter(|| black_box(many_chain(arg))));
-      group.bench_function("refm", |b| b.iter(|| black_box(many_chain_refm(arg))));
-  }
-  ```
+  #let chain_bench_src = raw(read("crates/perf-case/benches/chain_call.rs"), lang: "rust", block: true)
+  #let bench_fn = pick(chain_bench_src.text, "bench_chain_call", lang: chain_bench_src.lang)
+  #zebraw(
+    raw(bench_fn.src, lang: chain_bench_src.lang, block: true),
+    numbering-offset: bench_fn.first_line - 1,
+  )
 
   #raw("taskset --cpu-list 0 cargo bench -- Chain", lang: "bash")
 
@@ -842,110 +440,34 @@
 
   查看对应的 benchmark 的汇编代码
 
-  #raw("rust-objdump -SldCRT target/release/deps/chain_call-78137e0dde144467", lang: "bash")
+  #raw("rust-objdump -SldCRTRT target/release/deps/chain_call-78137e0dde144467", lang: "bash")
+
+  #let chain_bench_asm = raw(read("./assets/bench-asm/chain.s"), lang: "asm", block: true)
 
   #grid(columns: 2, gutter: 5em)[
     #set text(.60em)
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (5, 9))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (23, 28))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (33, 34))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (45, 46))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (57, 58))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (69, 70))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (81, 82))
+    #zebraw(
+      raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true),
+      line-range: (93, 107),
+      // highlight-lines: (93, 106),
+    )
 
-    ```asm
-    00000000002c7eb8 R_X86_64_GLOB_DAT        memcpy
-    ……
-    0000000000055a80 <perf_case::chain::many_chain::h12412cd1860633f8>:
-    ; perf_case::chain::many_chain::h12412cd1860633f8():
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:48
-    ; pub fn many_chain(arg: ChainState) -> u64 {
-    ……
-       55ac0: 4c 8b 3d f1 23 27 00         	movq	0x2723f1(%rip), %r15    # 0x2c7eb8 <_GLOBAL_OFFSET_TABLE_+0x1c98>
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-       55ac7: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       55acc: 4c 89 f7                     	movq	%r14, %rdi
-       55acf: 48 89 de                     	movq	%rbx, %rsi
-       55ad2: 41 ff d7                     	callq	*%r15
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-    ……
-       55af3: 41 ff d7                     	callq	*%r15
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-    ……
-       55b11: 41 ff d7                     	callq	*%r15
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-    ……
-       55b32: 41 ff d7                     	callq	*%r15
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-    ……
-       55b50: 41 ff d7                     	callq	*%r15
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-    ……
-       55b71: 41 ff d7                     	callq	*%r15
-    ……
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-       55b7f: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-    ……
-       55b8c: 41 ff d7                     	callq	*%r15
-    ……
-    ```
   ][
     #set text(.60em)
 
-    ```asm
-    00000000002c7eb8 R_X86_64_GLOB_DAT        memcpy
-    ……
-    0000000000055c20 <perf_case::chain::many_chain_refm::ha6a6629d685d517b>:
-    ; perf_case::chain::many_chain_refm::ha6a6629d685d517b():
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:60
-    ; pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:32
-    ;         update_data::update(&mut self.state);
-       55c48: 4c 8d 35 f1 00 00 00         	leaq	0xf1(%rip), %r14        # 0x55d40 <update_data::update::h5964edf586a94d9a>
-       55c4f: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c54: 41 ff d6                     	callq	*%r14
-       55c57: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c5c: 48 89 df                     	movq	%rbx, %rdi
-       55c5f: 41 ff d6                     	callq	*%r14
-       55c62: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c67: 48 89 df                     	movq	%rbx, %rdi
-       55c6a: 41 ff d6                     	callq	*%r14
-       55c6d: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c72: 48 89 df                     	movq	%rbx, %rdi
-       55c75: 41 ff d6                     	callq	*%r14
-       55c78: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c7d: 48 89 df                     	movq	%rbx, %rdi
-       55c80: 41 ff d6                     	callq	*%r14
-       55c83: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c88: 48 89 df                     	movq	%rbx, %rdi
-       55c8b: 41 ff d6                     	callq	*%r14
-       55c8e: be 00 00 01 00               	movl	$0x10000, %esi          # imm = 0x10000
-       55c93: 48 89 df                     	movq	%rbx, %rdi
-       55c96: 41 ff d6                     	callq	*%r14
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-       55c99: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:68
-    ;     arg.finalize()
-       55c9e: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       55ca3: 48 89 de                     	movq	%rbx, %rsi
-       55ca6: ff 15 0c 22 27 00            	callq	*0x27220c(%rip)         # 0x2c7eb8 <_GLOBAL_OFFSET_TABLE_+0x1c98>
-       55cac: 66 0f ef c0                  	pxor	%xmm0, %xmm0
-       55cb0: b8 10 00 00 00               	movl	$0x10, %eax
-       55cb5: 66 0f ef c9                  	pxor	%xmm1, %xmm1
-       55cb9: 0f 1f 80 00 00 00 00         	nopl	(%rax)
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1455
-    ;         crate::intrinsics::read_via_copy(src)
-    ```
+    #zebraw(
+      raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true),
+      line-range: (158, 203),
+      highlight-lines: 202,
+    )
   ]
 
   `chain` 版本七次 `memcpy`， `chain_refm` 版本一次 `memcpy`
@@ -961,98 +483,37 @@
 
   #raw("cargo b -r --features inline", lang: "bash")
 
-  #raw("rust-objdump -SldCRT target/release/chain_move", lang: "bash")
-
   #set text(.60em)
 
   #grid(columns: 2, gutter: 5em)[
-    ```asm
-    0000000000056140 R_X86_64_GLOB_DAT        memcpy
-    ……
-    00000000000146c0 <perf_case::chain::many_chain::hba1e7798f4d6f899>:
-    ; perf_case::chain::many_chain::hba1e7798f4d6f899():
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:48
-    ; pub fn many_chain(arg: ChainState) -> u64 {
-    ……
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-       1478d: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       14792: c5 f8 77                     	vzeroupper
-       14795: ff 15 a5 19 04 00            	callq	*0x419a5(%rip)          # 0x56140 <_GLOBAL_OFFSET_TABLE_+0x7e0>
-       1479b: b8 0c 00 00 00               	movl	$0xc, %eax
-    ……
-    ; /path/perf-case-study/crates/update-data/src/lib.rs:5
-    ;         *ele = ele.pow(2);
-       14b30: c5 fe 7f 44 c4 a8            	vmovdqu	%ymm0, -0x58(%rsp,%rax,8)
-       14b36: c5 fe 7f 4c c4 c8            	vmovdqu	%ymm1, -0x38(%rsp,%rax,8)
-       14b3c: c5 fe 7f 54 c4 e8            	vmovdqu	%ymm2, -0x18(%rsp,%rax,8)
-       14b42: c5 fe 7f 5c c4 08            	vmovdqu	%ymm3, 0x8(%rsp,%rax,8)
-       14b48: 48 83 c0 10                  	addq	$0x10, %rax
-       14b4c: 48 3d 0c 00 01 00            	cmpq	$0x1000c, %rax          # imm = 0x1000C
-       14b52: 0f 85 68 ff ff ff            	jne	0x14ac0 <perf_case::chain::many_chain::hba1e7798f4d6f899+0x400>
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-       14b58: 48 8d bc 24 18 00 08 00      	leaq	0x80018(%rsp), %rdi
-       14b60: 48 8d 74 24 08               	leaq	0x8(%rsp), %rsi
-       14b65: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       14b6a: c5 f8 77                     	vzeroupper
-       14b6d: ff 15 cd 15 04 00            	callq	*0x415cd(%rip)          # 0x56140 <_GLOBAL_OFFSET_TABLE_+0x7e0>
-       14b73: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-       14b77: b8 3e 00 00 00               	movl	$0x3e, %eax
-       14b7c: c5 f1 ef c9                  	vpxor	%xmm1, %xmm1, %xmm1
-       14b80: c5 e9 ef d2                  	vpxor	%xmm2, %xmm2, %xmm2
-       14b84: c5 e1 ef db                  	vpxor	%xmm3, %xmm3, %xmm3
-       14b88: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-    ……
-    ```
+    #raw("rust-objdump -SldCRTRT target/release/chain_move", lang: "bash")
 
-    只在第一次 `chain` 和 `finalize` 中的 `IntoIter` 发生了 `memcpy`。
+    #let chain_bin_asm = raw(read("./assets/bin-asm-inline/chain_move.s"), lang: "asm", block: true)
+    #zebraw(raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true), line-range: (5, 30))
+    #zebraw(raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true), line-range: (57, 62), highlight-lines: 61)
+    #zebraw(
+      raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true),
+      line-range: (295, 302),
+      highlight-lines: 301,
+    )
+
+    - 只在第一次 `chain` 和 `finalize` 中的 `IntoIter` 发生了 `memcpy`。
   ][
-    #raw("rust-objdump -SldCRT target/release/chain_refm", lang: "bash")
+    #raw("rust-objdump -SldCRTRT target/release/chain_refm", lang: "bash")
 
-    ```asm
-    0000000000056120 R_X86_64_GLOB_DAT        memcpy
-    ……
-    00000000000146c0 <perf_case::chain::many_chain_refm::h1a0bdb98e46ab4f5>:
-    ; perf_case::chain::many_chain_refm::h1a0bdb98e46ab4f5():
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:61
-    ; pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-       146c0: 48 89 fe                     	movq	%rdi, %rsi
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:1823
-    ;         intrinsics::volatile_load(src)
-       146c3: 48 8d 05 f0 24 04 00         	leaq	0x424f0(%rip), %rax     # 0x56bba <__rust_no_alloc_shim_is_unstable>
-       146ca: 0f b6 08                     	movzbl	(%rax), %ecx
-       146cd: b9 0c 00 00 00               	movl	$0xc, %ecx
-       146d2: 66 66 66 66 66 2e 0f 1f 84 00 00 00 00 00    	nopw	%cs:(%rax,%rax)
-    ; /path/perf-case-study/crates/update-data/src/lib.rs:5
-    ;         *ele = ele.pow(2);
-       146e0: c5 fe 6f 44 ce a0            	vmovdqu	-0x60(%rsi,%rcx,8), %ymm0
-    ……
-       14b30: 0f 85 6a ff ff ff            	jne	0x14aa0 <perf_case::chain::many_chain_refm::h1a0bdb98e46ab4f5+0x3e0>
-       14b36: 49 89 e3                     	movq	%rsp, %r11
-       14b39: 49 81 eb 00 00 08 00         	subq	$0x80000, %r11          # imm = 0x80000
-       14b40: 48 81 ec 00 10 00 00         	subq	$0x1000, %rsp           # imm = 0x1000
-       14b47: 48 c7 04 24 00 00 00 00      	movq	$0x0, (%rsp)
-       14b4f: 4c 39 dc                     	cmpq	%r11, %rsp
-       14b52: 75 ec                        	jne	0x14b40 <perf_case::chain::many_chain_refm::h1a0bdb98e46ab4f5+0x480>
-       14b54: 48 83 ec 18                  	subq	$0x18, %rsp
-    ; /$HOME/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-       14b58: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-    ; /path/perf-case-study/crates/perf-case/src/chain.rs:69
-    ;     arg.finalize()
-       14b5d: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       14b62: c5 f8 77                     	vzeroupper
-       14b65: ff 15 b5 15 04 00            	callq	*0x415b5(%rip)          # 0x56120 <_GLOBAL_OFFSET_TABLE_+0x7e0>
-       14b6b: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-       14b6f: b8 3e 00 00 00               	movl	$0x3e, %eax
-       14b74: c5 f1 ef c9                  	vpxor	%xmm1, %xmm1, %xmm1
-       14b78: c5 e9 ef d2                  	vpxor	%xmm2, %xmm2, %xmm2
-       14b7c: c5 e1 ef db                  	vpxor	%xmm3, %xmm3, %xmm3
-    ```
+    #let chain_bin_asm = raw(read("./assets/bin-asm-inline/chain_refm.s"), lang: "asm", block: true)
+    #zebraw(raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true), line-range: (5, 30))
+    #zebraw(
+      raw(chain_bin_asm.text, lang: chain_bin_asm.lang, block: true),
+      line-range: (293, 298),
+      highlight-lines: 297,
+    )
 
-    引用版本在 `finalize` 产生 `memcpy`。
+    - 引用版本只在 `finalize` 产生 `memcpy`。
   ]
+  - 内联后原本调用 `update` 的地方变为了寄存器操作。
 ]
 
 
@@ -1080,56 +541,18 @@
 #slide(composer: (1fr, auto))[
   #set text(.60em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
-  #show: columns.with(2, gutter: 3em)
 
-  ```asm
-  00000000002d62b8 R_X86_64_GLOB_DAT        memcpy
-  ……
-  00000000000d0690 <perf_case::chain::many_chain::hba1e7798f4d6f899>:
-  ; perf_case::chain::many_chain::hba1e7798f4d6f899():
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:48
-  ; pub fn many_chain(arg: ChainState) -> u64 {
-  ……
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-     d075d: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-     d0762: c5 f8 77                     	vzeroupper
-     d0765: ff 15 4d 5b 20 00            	callq	*0x205b4d(%rip)         # 0x2d62b8 <_GLOBAL_OFFSET_TABLE_+0x1d38>
-     d076b: b8 0c 00 00 00               	movl	$0xc, %eax
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-  ;         *ele = ele.pow(2);
-  ……
-  ; /home/saying/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-  ;         IntoIter { inner }
-     d0b28: 48 8d bc 24 18 00 08 00      	leaq	0x80018(%rsp), %rdi
-     d0b30: 48 8d 74 24 08               	leaq	0x8(%rsp), %rsi
-     d0b35: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-     d0b3a: c5 f8 77                     	vzeroupper
-     d0b3d: ff 15 75 57 20 00            	callq	*0x205775(%rip)         # 0x2d62b8 <_GLOBAL_OFFSET_TABLE_+0x1d38>
-     d0b43: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-  ……
+  #let chain_bench_asm = raw(read("./assets/bench-asm-inline/chain_call.s"), lang: "asm", block: true)
+  #grid(columns: 2, gutter: 5em)[
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (5, 9))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (57, 63))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (295, 303))
 
-  00000000000d0c30 <perf_case::chain::many_chain_refm::h1a0bdb98e46ab4f5>:
-  ; perf_case::chain::many_chain_refm::h1a0bdb98e46ab4f5():
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:60
-  ; pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-     d0c30: 48 89 fe                     	movq	%rdi, %rsi
-     d0c33: b8 0c 00 00 00               	movl	$0xc, %eax
-     d0c38: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-  ;         *ele = ele.pow(2);
-  ……
-  ; /home/saying/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-  ;         IntoIter { inner }
-     d10b8: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:68
-  ;     arg.finalize()
-     d10bd: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-     d10c2: c5 f8 77                     	vzeroupper
-     d10c5: ff 15 ed 51 20 00            	callq	*0x2051ed(%rip)         # 0x2d62b8 <_GLOBAL_OFFSET_TABLE_+0x1d38>
-     d10cb: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-  ……
-  ```
+  ][
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (348, 365))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (636, 642))
+  ]
 
   与之前的 bin 一样，`chain` 方法会在第一次调用时产生 `memcpy`，`chain_refm` 只有 `finalize` 时产生 `memcpy`。
 ]
@@ -1144,81 +567,41 @@
   #set text(.50em)
 
   #raw("cargo b --profile release-lto", lang: "bash")
-  #raw("rust-objdump -SldCRT target/release-lto/deps/chain_call-dde5b9f3179567d0", lang: "bash")
 
   #grid(columns: 2, gutter: 5em)[
+    #raw("rust-objdump -SldCRTRT target/release-lto/chain_move", lang: "bash")
 
-    ```asm
-    000000000004dd88 R_X86_64_GLOB_DAT        memcpy
-    ……
-    00000000000146a0 <perf_case::chain::many_chain::he5fd9c9a3b3a10ef>:
-    ; perf_case::chain::many_chain::he5fd9c9a3b3a10ef():
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:48
-    ; pub fn many_chain(arg: ChainState) -> u64 {
-       146a0: 48 89 fe                     	movq	%rdi, %rsi
-       146a3: b8 0c 00 00 00               	movl	$0xc, %eax
-       146a8: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-    ;         *ele = ele.pow(2);
-    ……
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-       1476d: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       14772: c5 f8 77                     	vzeroupper
-       14775: ff 15 0d 96 03 00            	callq	*0x3960d(%rip)          # 0x4dd88 <_GLOBAL_OFFSET_TABLE_+0x190>
-       1477b: b8 0c 00 00 00               	movl	$0xc, %eax
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-    ;         *ele = ele.pow(2);
-    ……
-    ; /home/saying/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-       14b38: 48 8d bc 24 18 00 08 00      	leaq	0x80018(%rsp), %rdi
-       14b40: 48 8d 74 24 08               	leaq	0x8(%rsp), %rsi
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:23
-    ;         self
-       14b45: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       14b4a: c5 f8 77                     	vzeroupper
-       14b4d: ff 15 35 92 03 00            	callq	*0x39235(%rip)          # 0x4dd88 <_GLOBAL_OFFSET_TABLE_+0x190>
-       14b53: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-       14b57: b8 3e 00 00 00               	movl	$0x3e, %eax
-       14b5c: c5 f1 ef c9                  	vpxor	%xmm1, %xmm1, %xmm1
-       14b60: c5 e9 ef d2                  	vpxor	%xmm2, %xmm2, %xmm2
-       14b64: c5 e1 ef db                  	vpxor	%xmm3, %xmm3, %xmm3
-       14b68: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-    ```
+    #let chain_move_asm = raw(read("./assets/bin-asm-lto/chain_move.s"), lang: "asm", block: true)
+
+    #zebraw(raw(chain_move_asm.text, lang: chain_move_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_move_asm.text, lang: chain_move_asm.lang, block: true), line-range: (5, 9))
+    #zebraw(
+      raw(chain_move_asm.text, lang: chain_move_asm.lang, block: true),
+      line-range: (57, 63),
+      highlight-lines: 61,
+    )
+    #zebraw(
+      raw(chain_move_asm.text, lang: chain_move_asm.lang, block: true),
+      line-range: (295, 305),
+      highlight-lines: 303,
+    )
+
+    与 inline 的效果一致，只剩下开头和结尾有 `memcpy`。
   ][
-    ```asm
-    000000000004dd58 R_X86_64_GLOB_DAT        memcpy
-    ……
-    00000000000146a0 <perf_case::chain::many_chain_refm::h3506ece423a3a7c0>:
-    ; perf_case::chain::many_chain_refm::h3506ece423a3a7c0():
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:60
-    ; pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-       146a0: 48 89 fe                     	movq	%rdi, %rsi
-       146a3: b8 0c 00 00 00               	movl	$0xc, %eax
-       146a8: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-    ;         *ele = ele.pow(2);
-    ……
-       14b22: 75 ec                        	jne	0x14b10 <perf_case::chain::many_chain_refm::h3506ece423a3a7c0+0x470>
-       14b24: 48 83 ec 18                  	subq	$0x18, %rsp
-    ; /home/saying/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-    ;         IntoIter { inner }
-       14b28: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-    ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:68
-    ;     arg.finalize()
-       14b2d: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-       14b32: c5 f8 77                     	vzeroupper
-       14b35: ff 15 1d 92 03 00            	callq	*0x3921d(%rip)          # 0x4dd58 <_GLOBAL_OFFSET_TABLE_+0x190>
-       14b3b: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-       14b3f: b8 3e 00 00 00               	movl	$0x3e, %eax
-       14b44: c5 f1 ef c9                  	vpxor	%xmm1, %xmm1, %xmm1
-       14b48: c5 e9 ef d2                  	vpxor	%xmm2, %xmm2, %xmm2
-       14b4c: c5 e1 ef db                  	vpxor	%xmm3, %xmm3, %xmm3
-    ```
+    #raw("rust-objdump -SldCRTRT target/release-lto/chain_refm", lang: "bash")
+
+    #let chain_refm_asm = raw(read("./assets/bin-asm-lto/chain_refm.s"), lang: "asm", block: true)
+
+    #zebraw(raw(chain_refm_asm.text, lang: chain_refm_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_refm_asm.text, lang: chain_refm_asm.lang, block: true), line-range: (5, 9))
+    #zebraw(
+      raw(chain_refm_asm.text, lang: chain_refm_asm.lang, block: true),
+      line-range: (290, 300),
+      highlight-lines: 297,
+    )
+
   ]
 
-  与 inline 的效果一致，只剩下开头和结尾有 `memcpy`。
 ]
 
 #slide(composer: (1fr, auto))[
@@ -1249,74 +632,143 @@
   检查一下对应的汇编
 
   ```rust
-  rust-objdump -SldC target/release/deps/chain_call-dde5b9f3179567d0
+  rust-objdump -SldCRT target/release/deps/chain_call-dde5b9f3179567d0
   ```
 
-  #show: columns.with(2, gutter: 3em)
-  ```asm
-  000000000028a840 R_X86_64_GLOB_DAT        memcpy
-  ……
-  00000000001beca0 <perf_case::chain::many_chain::he5fd9c9a3b3a10ef>:
-  ; perf_case::chain::many_chain::he5fd9c9a3b3a10ef():
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:49
-  ; pub fn many_chain(arg: ChainState) -> u64 {
-    1beca0: 48 89 fe                     	movq	%rdi, %rsi
-    1beca3: b8 0c 00 00 00               	movl	$0xc, %eax
-    1beca8: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-    ……
-    1bed62: 75 ec                        	jne	0x1bed50 <perf_case::chain::many_chain::he5fd9c9a3b3a10ef+0xb0>
-    1bed64: 48 83 ec 18                  	subq	$0x18, %rsp
-    1bed68: 48 8d 7c 24 08               	leaq	0x8(%rsp), %rdi
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-    1bed6d: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-    1bed72: c5 f8 77                     	vzeroupper
-    1bed75: ff 15 c5 ba 0c 00            	callq	*0xcbac5(%rip)          # 0x28a840 <_GLOBAL_OFFSET_TABLE_+0x3d8>
-    1bed7b: b8 0c 00 00 00               	movl	$0xc, %eax
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-  ;         *ele = ele.pow(2);
-  ……
-    1bf12c: 48 3d 0c 00 01 00            	cmpq	$0x1000c, %rax          # imm = 0x1000C
-    1bf132: 0f 85 68 ff ff ff            	jne	0x1bf0a0 <perf_case::chain::many_chain::he5fd9c9a3b3a10ef+0x400>
-  ; /home/saying/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-  ;         IntoIter { inner }
-    1bf138: 48 8d bc 24 18 00 08 00      	leaq	0x80018(%rsp), %rdi
-    1bf140: 48 8d 74 24 08               	leaq	0x8(%rsp), %rsi
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:23
-  ;         self
-    1bf145: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-    1bf14a: c5 f8 77                     	vzeroupper
-    1bf14d: ff 15 ed b6 0c 00            	callq	*0xcb6ed(%rip)          # 0x28a840 <_GLOBAL_OFFSET_TABLE_+0x3d8>
-    1bf153: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-    1bf157: b8 3e 00 00 00               	movl	$0x3e, %eax
-  ……
+  #let chain_bench_asm = raw(read("./assets/bench-asm-lto/chain.s"), lang: "asm", block: true)
 
-  00000000001bf240 <perf_case::chain::many_chain_refm::h3506ece423a3a7c0>:
-  ; perf_case::chain::many_chain_refm::h3506ece423a3a7c0():
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:61
-  ; pub fn many_chain_refm(mut arg: ChainState) -> u64 {
-    1bf240: 48 89 fe                     	movq	%rdi, %rsi
-    1bf243: b8 0c 00 00 00               	movl	$0xc, %eax
-    1bf248: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/update-data/src/lib.rs:5
-  ;         *ele = ele.pow(2);
-  ……
-    1bf6c2: 75 ec                        	jne	0x1bf6b0 <perf_case::chain::many_chain_refm::h3506ece423a3a7c0+0x470>
-    1bf6c4: 48 83 ec 18                  	subq	$0x18, %rsp
-  ; /home/saying/.rustup/toolchains/1.88-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/array/iter.rs:72
-  ;         IntoIter { inner }
-    1bf6c8: 48 8d 7c 24 18               	leaq	0x18(%rsp), %rdi
-  ; /home/saying/optimatist/rust-conf/perf-case-study/crates/perf-case/src/chain.rs:69
-  ;     arg.finalize()
-    1bf6cd: ba 00 00 08 00               	movl	$0x80000, %edx          # imm = 0x80000
-    1bf6d2: c5 f8 77                     	vzeroupper
-    1bf6d5: ff 15 65 b1 0c 00            	callq	*0xcb165(%rip)          # 0x28a840 <_GLOBAL_OFFSET_TABLE_+0x3d8>
-    1bf6db: c5 f9 ef c0                  	vpxor	%xmm0, %xmm0, %xmm0
-    1bf6df: b8 3e 00 00 00               	movl	$0x3e, %eax
-  ……
-  ```
+  #grid(columns: 2, gutter: 2em)[
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (1, 4))
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (5, 9))
+    #zebraw(
+      raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true),
+      line-range: (57, 63),
+      highlight-lines: 61,
+    )
+    #zebraw(
+      raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true),
+      line-range: (295, 304),
+      highlight-lines: 303,
+    )
+  ][
+    #zebraw(raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true), line-range: (350, 354))
+    #zebraw(
+      raw(chain_bench_asm.text, lang: chain_bench_asm.lang, block: true),
+      line-range: (635, 647),
+      highlight-lines: 642,
+    )
+  ]
 
   `many_chain` 两次，`many_chain_refm` 一次。
+]
+
+#focus-slide[
+  == 查看编译的过程
+]
+
+#slide(composer: (1fr, auto))[
+  #set text(.65em)
+  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
+
+  在 rust 关于 #link("https://blog.rust-lang.org/2016/04/19/MIR/")[MIR] 的 blog 中讲述了 rust 的编译过程，中间会涉及到几层 ir。
+
+  #image("assets/mir-flow.svg", height: 70%)
+
+  在 MIR 和 LLVM-IR 两个过程中都有优化，可以通过添加 flags 来观察 chain 和 chain_refm 生成的 ir 有什么区别。
+  ```bash
+  export RUSTFLAGS="--emit=asm,llvm-ir,mir"
+  cargo b -r
+  ```
+
+  这样就可以在项目的 "target/release-lto/deps/" 目录中找到对应的 MIR, LLVM-IR。
+]
+
+#slide(composer: (1fr, auto))[
+  #set text(.65em)
+  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
+
+  对比 `chain`, `chain_refm` 之间的差别。
+
+  ```bash
+  export RUSTFLAGS="--emit=asm,llvm-ir,mir"
+  cargo clean && cargo b -r
+  ```
+
+  从 target/release/deps/perf_case-\*.mir 观察 `many_chain`, `many_chain_refm` 两者的区别。
+
+  #grid(columns: (30%, 30%, 40%), gutter: 2em)[
+    #set text(.50em)
+
+    #let many_chain = raw(read("assets/ir/many_chain.mir"), lang: "rust", block: true)
+    #zebraw(
+      many_chain,
+      wrap: false,
+    )
+  ][
+    #set text(.50em)
+
+    #let many_chain = raw(read("assets/ir/many_chain_refm.mir"), lang: "rust", block: true)
+    #zebraw(
+      many_chain,
+      wrap: false,
+    )
+
+  ][
+    在 rustc nightly 的文档中
+
+    #quote(attribution: [Rustc doc])[
+      StorageLive statements cause memory to be allocated for the local while StorageDead statements cause the memory to be freed. In other words, StorageLive/StorageDead act like the heap operations allocate/deallocate, but for stack-allocated local variables.
+      #footnote[https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.StatementKind.html#variant.StorageLive]
+    ]
+
+    讲解了这对操作用于管理栈上的内存，`StorageLive` 会导致为局部变量分配内存，`StorageDead` 会导致释放内存。
+
+    `chain` 方法引入了很多的 `Storage{Live,Dead}` 来标记局部变量的存活范围，而 `chain_refm` 没有引入这么多 `Storeage` 语句。
+  ]
+
+]
+
+#slide(composer: (1fr, auto))[
+  #set text(.65em)
+  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
+
+  继续查看 LLVM-IR 的区别。
+
+  #set text(.50em)
+  #grid(columns: 2, gutter: 5em)[
+    #let chain_ll = raw(read("assets/ir/many_chain.ll"), lang: "llvm", block: true)
+    #zebraw(
+      chain_ll,
+      line-range: (1, 55),
+      highlight-lines: (24, 30, 37, 44, 51, 58, 66),
+      wrap: false,
+    )
+  ][
+    #let chain_refm_ll = raw(read("assets/ir/many_chain_refm.ll"), lang: "llvm", block: true)
+    #zebraw(
+      chain_refm_ll,
+      line-range: (1, 38),
+      wrap: false,
+    )
+  ]
+
+  在 LLVM-IR 中，`chain` 版本多出了很多 `memcpy` 的调用。
+]
+
+#slide(composer: (1fr, auto))[
+  #set text(.65em)
+  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
+
+  对比是否 inline 之间的差别。
+
+  ```bash
+  export RUSTFLAGS="--emit=asm,llvm-ir,mir"
+  cargo clean
+  cargo b -r
+  mv target/release target/release-origin
+  cargo b -r --features inline
+  mv target/release target/release-inline
+  ```
 ]
 
 #focus-slide[

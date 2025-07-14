@@ -1,0 +1,52 @@
+fn many_chain(_1: ChainState) -> u64 {
+    debug arg => _1;
+    let mut _0: u64;
+    let mut _2: chain::ChainState;
+    let mut _3: chain::ChainState;
+    let mut _4: chain::ChainState;
+    let mut _5: chain::ChainState;
+    let mut _6: chain::ChainState;
+    let mut _7: chain::ChainState;
+    let mut _8: chain::ChainState;
+    bb0: {
+        StorageLive(_2);
+        StorageLive(_3);
+        StorageLive(_4);
+        StorageLive(_5);
+        StorageLive(_6);
+        StorageLive(_7);
+        StorageLive(_8);
+        _8 = ChainState::chain(move _1) -> [return: bb1, unwind continue];
+    }
+    bb1: {
+        _7 = ChainState::chain(move _8) -> [return: bb2, unwind continue];
+    }
+    bb2: {
+        StorageDead(_8);
+        _6 = ChainState::chain(move _7) -> [return: bb3, unwind continue];
+    }
+    bb3: {
+        StorageDead(_7);
+        _5 = ChainState::chain(move _6) -> [return: bb4, unwind continue];
+    }
+    bb4: {
+        StorageDead(_6);
+        _4 = ChainState::chain(move _5) -> [return: bb5, unwind continue];
+    }
+    bb5: {
+        StorageDead(_5);
+        _3 = ChainState::chain(move _4) -> [return: bb6, unwind continue];
+    }
+    bb6: {
+        StorageDead(_4);
+        _2 = ChainState::chain(move _3) -> [return: bb7, unwind continue];
+    }
+    bb7: {
+        StorageDead(_3);
+        _0 = ChainState::finalize(move _2) -> [return: bb8, unwind continue];
+    }
+    bb8: {
+        StorageDead(_2);
+        return;
+    }
+}

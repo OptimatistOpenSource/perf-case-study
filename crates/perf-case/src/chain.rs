@@ -23,18 +23,17 @@ impl ChainState {
         self
     }
 
-    pub fn chain_refm(&mut self) -> &mut Self {
-        self.update();
-        self
-    }
-
     pub fn update(&mut self) {
         update_data::update(&mut self.state);
-        // update(&mut self.state);
     }
 
     pub fn finalize(self) -> u64 {
         self.state.into_iter().sum()
+    }
+
+    pub fn chain_refm(&mut self) -> &mut Self {
+        self.update();
+        self
     }
 }
 

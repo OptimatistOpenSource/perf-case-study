@@ -1,0 +1,48 @@
+fn many_chain_refm(_1: ChainState) -> u64 {
+    debug arg => _1;
+    let mut _0: u64;
+    let _2: &mut chain::ChainState;
+    let mut _3: &mut chain::ChainState;
+    let mut _4: &mut chain::ChainState;
+    let mut _5: &mut chain::ChainState;
+    let mut _6: &mut chain::ChainState;
+    let mut _7: &mut chain::ChainState;
+    let mut _8: &mut chain::ChainState;
+    let mut _9: &mut chain::ChainState;
+    let mut _10: chain::ChainState;
+    bb0: {
+        StorageLive(_2);
+        StorageLive(_9);
+        _9 = &mut _1;
+        _8 = ChainState::chain_refm(move _9) -> [return: bb1, unwind continue];
+    }
+    bb1: {
+        StorageDead(_9);
+        _7 = ChainState::chain_refm(move _8) -> [return: bb2, unwind continue];
+    }
+    bb2: {
+        _6 = ChainState::chain_refm(move _7) -> [return: bb3, unwind continue];
+    }
+    bb3: {
+        _5 = ChainState::chain_refm(move _6) -> [return: bb4, unwind continue];
+    }
+    bb4: {
+        _4 = ChainState::chain_refm(move _5) -> [return: bb5, unwind continue];
+    }
+    bb5: {
+        _3 = ChainState::chain_refm(move _4) -> [return: bb6, unwind continue];
+    }
+    bb6: {
+        _2 = ChainState::chain_refm(move _3) -> [return: bb7, unwind continue];
+    }
+    bb7: {
+        StorageDead(_2);
+        StorageLive(_10);
+        _10 = copy _1;
+        _0 = ChainState::finalize(move _10) -> [return: bb8, unwind continue];
+    }
+    bb8: {
+        StorageDead(_10);
+        return;
+    }
+}
