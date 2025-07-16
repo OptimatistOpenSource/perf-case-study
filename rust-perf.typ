@@ -15,7 +15,7 @@
   footer: self => self.info.institution,
   config-info(
     title: [Rust 性能优化],
-    subtitle: [rust 程序中发现的优化点。],
+    subtitle: [rust 程序中发现的优化点。#footnote[代码链接：https://github.com/OptimatistOpenSource/perf-case-study]],
     author: [Authors],
     date: datetime.today(),
     institution: [Optimatist],
