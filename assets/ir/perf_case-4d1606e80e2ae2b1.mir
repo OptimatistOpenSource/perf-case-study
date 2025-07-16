@@ -1,0 +1,16 @@
+fn zero_init::<impl at crates/perf-case/src/zero_init.rs:8:1: 8:14>::assign_3rd(_1: &mut ZeroInit, _2: &[u64; 25]) -> () {
+    debug self => _1;
+    debug data => _2;
+    let mut _0: ();
+    let _3: ();
+    let mut _4: &mut [u64; 25];
+
+    bb0: {
+        _4 = &mut ((*_1).0: [u64; 25]);
+        _3 = assign(move _4, move _2) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        return;
+    }
+}

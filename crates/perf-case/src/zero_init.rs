@@ -27,7 +27,6 @@ impl ZeroInit {
 #[inline(never)]
 pub fn init_it(data: &[u64; 25]) -> ZeroInit {
     let mut a = ZeroInit::default();
-
     a.assign_3rd(data);
     a
 }

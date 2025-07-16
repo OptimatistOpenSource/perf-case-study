@@ -1,0 +1,28 @@
+fn zero_init::<impl at crates/perf-case/src/zero_init.rs:8:1: 8:14>::assign_3rd(_1: &mut ZeroInit, _2: &[u64; 25]) -> () {
+    debug self => _1;
+    debug data => _2;
+    let mut _0: ();
+    let mut _3: &mut [u64; 25];
+    scope 1 (inlined assign) {
+        debug state => _3;
+        debug data => _2;
+        let _4: ();
+        let mut _5: &mut [u64];
+        let mut _6: &[u64];
+    }
+
+    bb0: {
+        _3 = &mut ((*_1).0: [u64; 25]);
+        StorageLive(_5);
+        _5 = copy _3 as &mut [u64] (PointerCoercion(Unsize, Implicit));
+        StorageLive(_6);
+        _6 = copy _2 as &[u64] (PointerCoercion(Unsize, Implicit));
+        _4 = core::slice::<impl [u64]>::copy_from_slice(move _5, move _6) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        StorageDead(_6);
+        StorageDead(_5);
+        return;
+    }
+}
