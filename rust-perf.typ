@@ -197,7 +197,7 @@
 ]
 
 #slide(composer: (1fr, auto))[
-  #set text(.65em)
+  #set text(.60em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
   #raw("cargo b -r --features inline", lang: "bash")
@@ -207,7 +207,8 @@
     #raw("rust-objdump -SldCRT target/release/zero_init", lang: "bash")
 
     #let zero_init_bin = raw(read("./assets/bin-asm-inline/zero_init.s"), lang: "asm", block: true)
-    #zebraw(zero_init_bin, line-range: (1, 4))
+    #zebraw(zero_init_bin, line-range: (1, 4), highlight-lines: 3)
+    #zebraw(zero_init_bin, line-range: (21, 26), highlight-lines: 25)
     #zebraw(zero_init_bin, line-range: (54, 82))
 
   ][
@@ -215,11 +216,13 @@
     #raw("rust-objdump -SldCRT target/release/zero_uninit", lang: "bash")
 
     #let zero_init_bin = raw(read("assets/bin-asm-inline/zero_uninit.s"), lang: "asm", block: true)
-    #zebraw(zero_init_bin, line-range: (1, 4))
+    #zebraw(zero_init_bin, line-range: (1, 4), highlight-lines: 3)
+    #zebraw(zero_init_bin, line-range: (21, 26), highlight-lines: 25)
     #zebraw(zero_init_bin, line-range: (54, 82))
   ]
 
-  它们生成了相同的汇编。
+  - 在 main 中调用的 `init_it`, `uninit_it` 两个函数都指向了相同的地址，此时编译器认为这两个函数是一样的。
+  - 两个函数从函数调用变成了寄存器的操作。
 ]
 
 #slide(composer: (1fr, auto))[
@@ -1016,7 +1019,7 @@
 #slide(composer: (1fr, auto))[
   在一些建议中需要为函数的输入和输出使用 `std::hint::black_box` 包裹，尝试在这个例子中将输入的 `Vec` 包裹。
 
-  #set text(.65em)
+  #set text(.60em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
   #grid(columns: 2, gutter: 5em)[
