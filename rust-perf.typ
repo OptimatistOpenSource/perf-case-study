@@ -26,18 +26,16 @@
 #set quote(block: true)
 #show quote.where(block: true): block.with(width: 100%, fill: luma(235), outset: .5em, radius: .2em)
 #show footnote.entry: set text(size: 8pt)
-#show link: underline
 #set text(15pt)
+#show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
 // #set heading(numbering: numbly("{1}.", default: "1.1"))
 
 #title-slide(logo: image("assets/optimatist.png", height: 10%))
 
-#focus-slide[
-  = `Default` trait 对性能造成的影响
+= `Default` trait 对性能造成的影响
 
-  使用 Default trait 进行初始化使得代码易于维护，但是有些情况会影响性能。
-]
+使用 Default trait 进行初始化使得代码易于维护，但是有些情况会影响性能。
 
 #let cg_toml_path = "./Cargo.toml"
 #let cg_toml = raw(read(cg_toml_path), lang: "toml", block: true)
@@ -196,6 +194,7 @@
   为其标注 inline 能够提升多少？
 ]
 
+#let zero_uninit_bin = raw(read("assets/bin-asm-inline/zero_uninit.s"), lang: "asm", block: true)
 #slide(composer: (1fr, auto))[
   #set text(.60em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
@@ -215,10 +214,9 @@
     #set text(.75em)
     #raw("rust-objdump -SldCRT target/release/zero_uninit", lang: "bash")
 
-    #let zero_init_bin = raw(read("assets/bin-asm-inline/zero_uninit.s"), lang: "asm", block: true)
-    #zebraw(zero_init_bin, line-range: (1, 4), highlight-lines: 3)
-    #zebraw(zero_init_bin, line-range: (21, 26), highlight-lines: 25)
-    #zebraw(zero_init_bin, line-range: (54, 82))
+    #zebraw(zero_uninit_bin, line-range: (1, 4), highlight-lines: 3)
+    #zebraw(zero_uninit_bin, line-range: (21, 26), highlight-lines: 25)
+    #zebraw(zero_uninit_bin, line-range: (54, 82))
   ]
 
   - 在 main 中调用的 `init_it`, `uninit_it` 两个函数都指向了相同的地址，此时编译器认为这两个函数是一样的。
@@ -280,16 +278,14 @@
   两者没有差距，符合之前汇编的观察。
 ]
 
-#focus-slide[
-  // = 由于 move 造成了 memcpy
-  = 链式调用的性能陷阱
+// = 由于 move 造成了 memcpy
+= 链式调用的性能陷阱
 
-  在 Rust 中经常可以看到 Builder 模式进行配置或资源的初始化。
+在 Rust 中经常可以看到 Builder 模式进行配置或资源的初始化。
 
-  那么 build 过程中是让构造器被 move 还是传递它的可变引用呢？
+那么 build 过程中是让构造器被 move 还是传递它的可变引用呢？
 
-  使构造器 move 和传递引用性能有差距吗？
-]
+使构造器 move 和传递它的引用性能有差距吗？
 
 #let chain_lib_path = "crates/perf-case/src/chain.rs"
 #let chain_lib_src = raw(read(chain_lib_path), lang: "rust", block: true)
@@ -566,13 +562,11 @@
   两者差距为 24.7%, 依然是 memcpy 造成的差距。
 ]
 
-#focus-slide[
-  = 探索 Rust 编译的过程
+= 探索 Rust 编译的过程
 
-  这其中发生了什么使 `chain` 要多出那么多操作，内联是在什么地方做出的决策。
+这其中发生了什么使 `chain` 要多出那么多操作。
 
-  接下来探索 Rust 的编译过程。
-]
+内联是在什么地方做出的决策。
 
 #slide(composer: (1fr, auto))[
   #set text(.65em)
@@ -625,9 +619,9 @@
   ][
     在 rustc nightly 的文档中
 
-    #quote(attribution: [Rustc doc])[
+    #quote(attribution: [Rustc doc#footnote[https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.StatementKind.html#variant.StorageLive]])[
       StorageLive statements cause memory to be allocated for the local while StorageDead statements cause the memory to be freed. In other words, StorageLive/StorageDead act like the heap operations allocate/deallocate, but for stack-allocated local variables.
-      #footnote[https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.StatementKind.html#variant.StorageLive]
+
     ]
 
     讲解了这对操作用于管理栈上的内存，`StorageLive` 会导致为局部变量分配内存，`StorageDead` 会导致释放内存。
@@ -874,40 +868,24 @@
   - 开启 LTO 会使用 `call fastcc`，以及生成 LLVM IR bitcode。
 ]
 
-#focus-slide[
-  = Black box
+= Black box 在性能测试中的使用
 
-  在之前的基准测试代码中已经出现过 `black_box`, 接下来讲解何时使用它。
-]
+在之前的基准测试代码中已经出现过 `black_box`。 接下来对它进行更深入的探索。
 
+#let black_box_path = "./crates/perf-case/src/black_box.rs"
+#let black_box_src = raw(read(black_box_path), lang: "rust", block: true)
 #slide(composer: (1fr, auto))[
+  #set text(.65em)
+  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
+
   在基准测试中很容易因为编译器的优化将想要测试的函数被优化掉，很可能零秒就将基准测试运行完毕。
 
   Rust 在 1.66 版本中稳定了 `std::hint::black_box` 阻止编译器的一些优化。
 
   在 [Rust 1.66 blog]#footnote[https://blog.rust-lang.org/2022/12/15/Rust-1.66.0/#core-hint-black-box] 中的例子
 
-  #set text(.65em)
-  #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
-
   #grid(columns: 2, gutter: 5em)[
-    ```rust
-    // ./crates/perf-case/src/black_box.rs
-    #[inline(always)]
-    fn push_cap(v: &mut Vec<i32>) {
-      for i in 0..4 {
-        v.push(i);
-        std::hint::black_box(v.as_ptr());
-      }
-    }
-
-    pub fn bench_push() -> Duration {
-      let mut v = Vec::with_capacity(4);
-      let now = Instant::now();
-      push_cap(&mut v);
-      now.elapsed()
-    }
-    ```
+    #zebraw(header: hp + black_box_path, line-range: (6, 20), black_box_src)
 
     使用 cargo-show-asm 观察生成的汇编。
     ```bash
@@ -942,8 +920,9 @@
     ```
   ]
 
-  通过 `black_box` 避免将 `push` 优化，在循环中增加了指令 #raw("movq %rbx, 8(%rsp)", lang: "asm") 在每次循环中都向栈中写入，在一次 benchmark 中，
-  由于在循环中调用 `black_box` 导致观察到的性能和实际收益不符，针对这种情况需要使用一些其他的手段来避免编译器的优化。
+  通过 `black_box` 避免将 `push` 优化，在循环中增加了指令 #raw("movq %rbx, 8(%rsp)", lang: "asm") 在每次循环中都向栈中写入。
+
+  由于在循环中调用 `black_box` 可能导致观察到的性能和实际收益不符，针对这种情况需要使用一些其他的手段来避免编译器的优化。
 ]
 
 #slide(composer: (1fr, auto))[
@@ -954,29 +933,7 @@
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
   #grid(columns: 2, gutter: 5em)[
-    ```rust
-    // ./crates/perf-case/src/black_box.rs
-    pub fn black_box() {
-        unsafe { asm!("", options(nostack, preserves_flags)) };
-    }
-
-    #[inline(always)]
-    fn push_cap_1(v: &mut Vec<i32>) {
-        for i in 0..4 {
-            v.push(i);
-            black_box();
-        }
-    }
-
-    pub fn bench_push_1() -> Duration {
-        let mut v = Vec::with_capacity(4);
-        let now = Instant::now();
-        push_cap_1(&mut v);
-        let t = now.elapsed();
-        std::hint::black_box(v);
-        t
-    }
-    ```
+    #zebraw(header: hp + black_box_path, line-range: (20, 41), black_box_src)
 
     查看其汇编
 
@@ -1017,21 +974,13 @@
 ]
 
 #slide(composer: (1fr, auto))[
-  在一些建议中需要为函数的输入和输出使用 `std::hint::black_box` 包裹，尝试在这个例子中将输入的 `Vec` 包裹。
-
-  #set text(.60em)
+  #set text(.63em)
   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
 
+  在一些建议中需要为函数的输入和输出使用 `std::hint::black_box` 包裹，尝试在这个例子中将输入的 `Vec` 包裹。
+
   #grid(columns: 2, gutter: 5em)[
-    ```rust
-    // ./crates/perf-case/src/black_box.rs
-    pub fn bench_push_wrapper() -> Duration {
-        let mut v = std::hint::black_box(Vec::with_capacity(4));
-        let now = Instant::now();
-        push_cap(&mut v);
-        now.elapsed()
-    }
-    ```
+    #zebraw(header: hp + black_box_path, line-range: (42, 48), black_box_src)
 
     查看汇编
 
@@ -1061,13 +1010,24 @@
   在 `black_box` 相关 issue 中有另一个版本的实现#footnote[https://github.com/rust-lang/rust/issues/64102#issuecomment-674175929]。
 
   #grid(columns: 2, gutter: 5em)[
-    ```rust
-    // ./crates/perf-case/src/black_box.rs
-    pub fn better_black_box(mut int_x: u64) -> u64 {
-        unsafe { asm!("/* {x} */", x = inout(reg) int_x, options(nostack)) };
-        int_x
-    }
-    ```
+    #let better_black_box = pick(black_box_src.text, "better_black_box", lang: black_box_src.lang)
+    #zebraw(
+      raw(
+        better_black_box.src,
+        lang: black_box_src.lang,
+        block: true,
+      ),
+      header: hp + black_box_path,
+      numbering-offset: better_black_box.first_line - 1,
+    )
+
+    // ```rust
+    // // ./crates/perf-case/src/black_box.rs
+    // pub fn better_black_box(mut int_x: u64) -> u64 {
+    //     unsafe { asm!("/* {x} */", x = inout(reg) int_x, options(nostack)) };
+    //     int_x
+    // }
+    // ```
 
     临时添加 `#[inline(never)]` 来观察
 
@@ -1097,10 +1057,56 @@
   不知道为何官方采用了向栈写入的实现，`black_box` 并不是在所有情况都适用，如果发现不能满足自己的用例，可以尝试内联汇编达到想要的效果。
 ]
 
-// #slide(composer: (1fr, auto))[
-//   #set text(.65em)
-//   #show raw.where(block: true): block.with(width: 100%, fill: luma(240), outset: .5em, radius: .2em)
-//   #let file  = read("Cargo.toml")
-//   // #codly-range(2,end: 3)
-//   #raw(file,block: true)
-// ]
+= Rust 中的间接调用
+
+Rust 默认会生成位置无关代码，这也导致函数调用时的额外开销。
+
+#slide(composer: (1fr, auto))[
+  #set text(.60em)
+
+  使用 ```bash cargo b -r``` 编译的二进制中，可以看到函数调用是通过 `callq *0x40e58(%rip)` 间接调用的。
+
+  在调用函数时需要先计算函数位置后才能调用。
+
+  #zebraw(zero_uninit_bin, line-range: (1, 4))
+  #zebraw(zero_uninit_bin, line-range: (6, 9))
+  #zebraw(zero_uninit_bin, line-range: (23, 27))
+  #zebraw(zero_uninit_bin, line-range: (54, 57))
+
+  Rust 提供了 relocation-model#footnote[https://doc.rust-lang.org/rustc/codegen-options/index.html#relocation-model]<rm>
+  来控制生成位置无关代码。
+
+  #quote(attribution: [Rustc doc #footnote(<rm>)])[
+    - Primary relocation models
+
+    #set list(indent: 0.4cm)
+
+    - static - non-relocatable code, machine instructions may use absolute addressing modes.
+
+    - pic - fully relocatable position independent code, machine instructions need to use relative addressing modes.
+      Equivalent to the "uppercase" -fPIC or -fPIE options in other compilers, depending on the produced crate types.
+      This is the default model for majority of supported targets.
+
+    - pie - position independent executable, relocatable code but without support for symbol interpositioning (replacing symbols by name using LD_PRELOAD and similar). Equivalent to the "uppercase" -fPIE option in other compilers. pie code cannot be linked into shared libraries (you'll get a linking error on attempt to do this).
+  ]
+
+]
+
+#slide(composer: (1fr, auto))[
+  #set text(.60em)
+
+  使用 static 选项让编译器使用绝对地址。
+
+  ```bash
+  export RUSTFLAGS="-C relocation-model=static"
+  cargo b -r
+  ```
+
+  #let static_path = "./assets/bin-rm-static/uninit.s"
+  #let static_src = raw(read(static_path), lang: "asm", block: true)
+  #zebraw(static_src, line-range: (1, 5))
+  #zebraw(static_src, line-range: (23, 27))
+  #zebraw(static_src, line-range: (51, 54))
+
+  这样就没有了间接调用。
+]
